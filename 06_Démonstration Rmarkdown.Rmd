@@ -1,0 +1,53 @@
+---
+title: "Démonstration Rmarkdown"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("~/R_Advanced/")
+library(tidyverse)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+# Titre de niveau 1
+## Titre de niveau 2
+### Titre de niveau 3
+
+
+_Un texte en italique_
+
+
+__Un texte en gras__
+
+
+[Un lien vers](https://rmarkdown.rstudio.com/)
+
+
+
+![Une image située dans le répertoire](data/renault_5.jpg)
+
+
+
+
+

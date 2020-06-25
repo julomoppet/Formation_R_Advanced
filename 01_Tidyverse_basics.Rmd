@@ -1,0 +1,837 @@
+---
+title: "Le Tidyverse"
+output:
+  html_document: 
+    highlight: haddock
+    theme: united
+    toc: yes
+    toc_float : true
+    toc_depth: 3
+---
+
+## Introduction
+
+Le [Tidyverse](https://www.tidyverse.org/) est un ensemble de packages qui partagent une même philosophie en ce qui concerne la structure des données et la syntaxe du code R. 
+
+Il est possible d'installer l'ensemble des packages en faisant:
+
+```{r eval=FALSE, include=TRUE}
+install.packages("tidyverse")
+```
+
+### Elements historiques
+
+Hadley Wickham est considéré comme le principal développeur à l'origine du `tidyverse`.   
+La version `1.0.0` date de septembre 2016.  
+
+Les 4 éléments principaux du "tidy tools manifesto" et qui servent à unifier les outils du `tidyverse` sont:
+
+* l'utilisation les mêmes structures de données 
+* la création de fonctions simples à l'aide du pipe (%>%)
+* l'utilisation de la programmation fonctionnelle
+* un design réfléchi pour les humains.
+
+Parmi les packages membres du tidyverse, 5 sont présents dans les 10 packages les plus téléchargés sur le CRAN.
+
+Parfois critiqué parce que très lié à RStudio, ceci constitue néanmoins un écosystème parfois plus simple à appréhender que d'autres approches de R. 
+
+
+### Composition
+
+Les 4 principaux packages dont nous allons voir les fonctionnalités sont:  
+
+* `readr`, qui permet l'import / export de données depuis plusieurs formats de source
+* `dplyr` qui permet la manipulation de données
+* `tidyr` qui permet de modifier la structure des données
+* `stringr` qui permet de manipuler les chaînes de caractères
+
+
+Nous ne verrons pas `ggplot2` car bien que faisant partie du tidyverse, d'abord par manque de temps mais aussi parce c'est un package de dataviz qui ouvre sur tout un écosystème à part entière.
+
+D'autres packages, tels que `rvest`, `DBI`, `purrr` ou encore `magrittr` et `glue` sont très utilisés en conjonction avec le tidyverse.
+Enfin, plus récemment des packages tels que `recipes` ou `parsnip` permettent de faire du machine learning en restant dans ce cadre : c'est un ensemble de packages satellites appelé `tidymodels`. 
+
+## Import / export de données avec `readr`
+
+Nous allons travailler à partir d'un fichier disponible en open data et qui donne des informations sur le nombre de voyageurs sur le réseau ferré de la RATP et de la SNCF en Ile-de-France.
+
+
+[source](https://data.iledefrance-mobilites.fr/explore/dataset/validations-sur-le-reseau-ferre-nombre-de-validations-par-jour-2e-sem/table/)
+
+### Fonctions d'import
+
+Les fonctions `read_table()` et `read_csv()` sont souvent bien plus rapides que leurs équivalents dans R base.  
+
+(*à noter* : les fonctions read_csv2 (resp. read.csv2) sont adaptées aux séparateurs des chiffres en français)
+
+```{r message=TRUE, warning=FALSE}
+library(readr)
+library(tictoc) # librairie pour comptabiliser le temps de calcul
+
+# source de données https://data.sncf.com/explore/dataset/validations-sur-le-reseau-ferre-nombre-de-validations-par-jour-1er-semestre-2015/export/
+
+tic("Import avec R base")
+import_slow <- read.csv2("data/validations-sur-le-reseau-ferre-ratp.csv")
+toc()
+
+tic("Import avec readr")
+import_fast <- readr::read_csv2("data/validations-sur-le-reseau-ferre-ratp.csv")
+toc()
+
+```
+
+On voit ici que l'import est 2 fois plus rapide avec `readr` : sur de plus gros fichiers, le gain de temps peut être appréciable...
+
+On peut ensuite inspecter les données importées par `readr` :
+
+```{r}
+str(import_fast)
+```
+
+puis visualiser quelques lignes en haut de tableau:
+
+```{r}
+head(import_fast)
+```
+
+On peut aussi comparer ces données avec celles importées par `R` base 
+
+```{r}
+str(import_slow)
+```
+
+
+En plus d'être plus rapide, `readr` a mieux detecté les formats de date et a évité de considérer les chaînes de caractères comme facteurs.  
+Une autre qualité de ce package est sa capacité à lire des fichiers zippés sans avoir à les décompresser :
+
+```{r}
+
+tic("Import zippé")
+import_zip <- readr::read_csv2("data/validations-sur-le-reseau-ferre-ratp.csv")
+toc()
+
+```
+
+En  plus des fichiers csv, `readr` est capable de lire d'autres formats avec les  fonctions `read_delim()`, `read_tsv()`, `read_fwf()`, `read_table()` et `read_log()`, `read_lines()` et `read_file()`
+
+### Fonctions d'export
+
+Les fonctions `write_csv()`, `write_delim()`, `write_tsv()`, `write_file()`, `write_lines()` ou encore `write_rds()` permettent l'export de données dans un fichier en conservant les formats du dataframe d'origine.
+
+
+### Formats spécifiques de données
+
+Il existe plusieurs autres packages qui fonctionnent très bien avec le `tidyverse` pour des formats de données issus de logiciels spécifiques :
+
+* `haven` pour les fichiers SPSS, Stata, et SAS
+
+* `readxl` permet l'import / export de fichiers Excel
+
+* `DBI` en conjonction avec les packages `RMySQL`, `RSQLite`, `RPostgreSQL` ou autres permettent de dialoguer en SQL avec des bases de données
+
+* `jsonlite` est pratique pour les fichiers json et xml
+
+* `foreign` permet également de lire des fichiers SPSS, Stata, et SAS, mais aussi Minitab ou Weka, ainsi que certains fichiers dBase
+
+
+
+## Data wrangling avec `dplyr`
+
+
+L'expression *Data Wrangling*, très commune dans le monde de la Data Science, est l'ensemble des opérations de préparation de données. Autrement dit, ce sont les étapes qui permettent de passer de données brutes à un format de données adapté à d'autres tâches telles que le machine learning :
+
+* découverte : structure, contenu, qualité, distributions, volumes
+* structuration : selon le type de source, adapter les données à un format tabulaire avec les agrégats au bon niveau
+* nettoyage : valeurs manquantes, outliers, erreurs de codage
+* enrichissement : mélanger les données de différentes sources
+* validation : s'assurer que la tâche puisse être reproductible
+* publication : sauvegarde des données transformées, documentation des champs
+
+C'est une tâche qui occupe une part de temps non-négligeable pour beaucoup de data scientists.  
+
+Par conséquent, gagner en efficacité sur ces opérations représente un gain de temps appréciable sur la globalité d'un projet.
+
+
+### Premier aperçu de la syntaxe `dplyr`
+
+Nous allons travailler avec la table `import_fast`, dont nous pouvons visuliser quelques statistiques avec la fonction de base `summary`
+
+```{r}
+mydata <- import_fast
+summary(mydata)
+
+```
+
+Le package `dplyr` dispose d'une fonction appelée `glimpse` qui donne aussi un bon aperçu de la table de données :
+
+```{r message=FALSE}
+library(dplyr)
+glimpse(mydata)
+
+```
+
+
+Passons maintenant en revue quelques fonctions essentielles de `dplyr` pour découvrir les données.
+Un complément très utile de `dplyr` est le package `magrittr` qui permet d'enchainer les instructions.
+
+Par exemple, plutôt que d'écrire la fonction select sur la 1ère colonne de cette façon:
+
+```{r}
+select(mydata,1)
+
+```
+
+nous allons plutôt privilégier cette écriture
+
+```{r}
+mydata %>% select(1)
+
+```
+
+qui prend tout son sens lorsqu'on accumule les instructions :
+
+```{r}
+mydata %>% 
+  select(1) %>% 
+  filter(JOUR == as.Date("2018-11-20")) %>% 
+  mutate(ANNEE = lubridate::year(JOUR)) %>% 
+  distinct(ANNEE)
+
+```
+
+En effet, cela permet de simplifier les scripts en:
+
+* évitant les tables intermédiaires
+* enchainant les actions 
+
+
+Nous allons tout d'abord essayer de comprendre à quoi correspondent certaines colonnes avec des fonctions de base.
+
+
+En premier lieu, la fonction `count()` va donner les effectifs par la variable sélectionnée, ici sans option de tri: 
+
+```{r}
+mydata %>% count(JOUR) 
+
+```
+
+Même chose avec l'option de tri :
+
+```{r}
+mydata %>% count(JOUR, sort=TRUE)
+
+```
+
+Puis nous pourrons calculer quelques statistiques avec `summarise` :
+
+```{r}
+
+mydata %>% count(JOUR) %>% summarise(NB_JOURS = max(JOUR)- min(JOUR)+1,
+                                     NB_ROWS = n())
+
+```
+
+
+
+Nous pouvons aussi séléctionner un certain nombre de colonnes, comme ici les variables qui identifient une station 
+
+```{r}
+mydata %>% select(LIBELLE_ARRET, ID_REFA_LDA, CODE_STIF_ARRET)
+
+```
+
+
+L'opérateur `select` autorise la sélection, mais aussi l'antisélection de variables:
+
+```{r}
+keep.vars <- c("JOUR", "LIBELLE_ARRET", "NB_VALD")
+
+mydata %>% select(one_of(keep.vars))
+mydata %>% select(-one_of(keep.vars))
+```
+
+
+Avec des sous-opérateurs, on peut aussi séléctionner des variables à partir de leur nom : on peut ainsi chercher des variables selon le début, la fin, ou le contenu de leur libellé
+
+```{r}
+mydata %>% select(starts_with("CODE"))
+```
+
+```{r}
+mydata %>% select(ends_with("ARRET"))
+```
+
+```{r}
+mydata %>% select(contains("STIF"))
+```
+
+
+La fonction `sample` est également très utile. Elle permet l'affichage d'un échantillon en donnant soit :
+
+* soit le nombre d'observations (ici 10)
+
+```{r}
+mydata %>% sample_n(10)
+```
+
+* le pourcentage d'observations (ici 0.01 = 1%)
+
+```{r}
+mydata %>% sample_frac(.01)
+```
+
+Ensuite, nous pouvons explorer les données par ligne plutôt qu'en colonnes.
+
+La fonction `filter` permet de selectionner des lignes remplissant les conditions qu'on lui demande, ici la valeur de la variable `LIBELLE_ARRET`
+
+```{r}
+mydata %>% filter(LIBELLE_ARRET == "COLOMBES") 
+
+```
+
+On peut aussi sélectionner des lignes par valeur numérique:
+
+
+```{r}
+mydata %>% filter(NB_VALD > 100000) %>% head(5)
+
+```
+
+On peut aussi comparer avec une statistique concernant la même colonne
+
+```{r}
+mydata %>% filter(NB_VALD == max(NB_VALD, na.rm = TRUE)) 
+
+```
+
+*Remarque* : nous verrons souvent que dans les calcul tels que `mean` ou `max` ou beaucoup d'autres opérateurs statistiques, il est recommandé d'utiliser l'option `na.rm = TRUE` afin que les valeurs manquantes soient ignorées.
+
+On peut aussi parfaitement combiner des conditions de séléction :
+
+```{r}
+mydata %>% filter(JOUR > as.Date("2018-09-18") & JOUR < as.Date("2018-09-20")) %>% head(5)
+
+```
+
+On peut aussi étendre la fonction `filter` avec les fonctions `filter_all`, `filter_if` et `filter_at`, pour sélectionner par exemple en fonction du format des colonnes, mais l'usage est plus complexe.
+
+
+Il existe des opérateurs pour sélectionner des lignes par indice
+
+```{r}
+mydata %>% slice(1000:1010)
+```
+
+
+
+* Exemple concret : nous cherchons la valeur la plus haute pour chaque modalité?
+
+A l'image du langage `SQL`, `group_by` sert à grouper des calculs.
+
+En appliquant la fonction `top_n` après un `group_by` par `LIBELLE_ARRET`, on va pouvoir trouver le nombre maximal de validations par arrêt. La fonction `arrange` sert à trier les résultats, ici par ordre decroissant grâce à `desc` (le tri se faisant en ordre croissant par défaut)
+
+```{r}
+mydata %>% group_by(LIBELLE_ARRET) %>% top_n(1, NB_VALD) %>% arrange(desc(NB_VALD))
+
+```
+
+Si on veut les 3 valeurs les plus grandes, on fera
+
+```{r}
+mydata %>% group_by(LIBELLE_ARRET) %>% top_n(3, NB_VALD) %>% arrange(desc(NB_VALD))
+
+```
+
+On peut compter avec R base le nombre d'observations où, pour chaque colonne, il manque des valeurs :
+
+```{r}
+colSums(is.na(mydata))
+
+```
+
+Pour quelles lignes manque-t-il des données dans la variable `LIBELLE_ARRET`?
+
+```{r}
+mydata %>% filter(is.na(LIBELLE_ARRET)) 
+
+```
+
+On peut aussi antisélectionners toutes les lignes incomplêtes à l'aide de `na.omit()`
+
+```{r}
+mydata %>% na.omit()
+
+```
+
+ce qui est équivalent à 
+
+
+```{r}
+mydata %>% filter(complete.cases(.))
+
+```
+
+On peut aussi renommer les variables, ici pour raccourcir les noms des variables de code
+
+```{r}
+mydata %>% rename(CODE_RES = CODE_STIF_RES, 
+                  CODE_TRNS = CODE_STIF_TRNS, 
+                  CODE_ARRET = CODE_STIF_ARRET) %>% head(3)
+```
+
+Remarque : on peut aussi renommer des variables au sein d'un `select`, mais cela implique que seules resteront les variables présentes en son sein
+
+```{r}
+mydata %>% select(CODE_RES = CODE_STIF_RES, 
+                  CODE_TRNS = CODE_STIF_TRNS, 
+                  CODE_ARRET = CODE_STIF_ARRET) 
+```
+
+Nous avons déjà vu que la fonction `arrange` permet de trier (par ordre alphabétique ou par ordre numérique).
+
+Par exemple, ordonner les LIBELLE_ARRET de A à Z
+```{r}
+mydata %>% arrange(LIBELLE_ARRET) 
+
+```
+
+Ou encore ordonner par jour
+```{r}
+mydata %>% arrange(JOUR) 
+
+```
+
+
+
+### Fonctions de synthèse
+
+La fonction `mutate` permet de créer une nouvelle variable à partir des autres
+
+
+```{r}
+z <- mydata %>% filter(LIBELLE_ARRET == "BERCY" & JOUR == "2018-08-04") %>% slice(1:5)
+
+z %>% mutate(cum_mean = cummean(NB_VALD))
+
+```
+
+ou d'en créer plusieurs simultanément :
+
+
+```{r}
+z <- mydata %>% filter(LIBELLE_ARRET == "BERCY" & JOUR == "2018-08-04") %>% slice(1:5)
+
+z %>% mutate(cum_mean = cummean(NB_VALD), cum_500 = cumall(NB_VALD < 500))
+
+```
+
+Il existe aussi la fonction `case_when` qui permet par exemple de découper une variable en classes :
+
+
+```{r}
+mydata %>% filter(LIBELLE_ARRET == "MONTPARNASSE") %>% 
+  mutate(class_vld = case_when(NB_VALD < 20 ~ "5.very low",
+                               20 < NB_VALD & NB_VALD < 800 ~ "4.low",
+                               800 < NB_VALD & NB_VALD < 3000 ~ "3.medium",
+                               3000 < NB_VALD & NB_VALD < 50000 ~ "2.high",
+                               NB_VALD > 50000 ~ "1.very high")) %>%
+  group_by(class_vld) %>% summarise(n = n()) %>% arrange(class_vld)
+
+```
+
+La fonction `summarise` permet de calculer des statistiques
+
+```{r}
+mydata %>% filter(LIBELLE_ARRET == "BERCY") %>% summarise(max = max(NB_VALD, na.rm = T),
+                                                          min = min(NB_VALD, na.rm = T),
+                                                          mean = mean(NB_VALD, na.rm = T),
+                                                          median = median(NB_VALD, na.rm = T),
+                                                          sd = sd(NB_VALD, na.rm = T),
+                                                          nb_valeurs_distinctes = n_distinct(NB_VALD), n())
+
+```
+
+
+
+
+### Fonctions de jointures
+
+`dplyr` comprend de nombreuses fonctions équivalentes à la famille des `join` et `union` en langage SQL
+
+* Fonctions pour concatener des lignes ou colonnes :
+
+`bind_cols` permet de concatener des dataframes en colonnes
+```{r}
+bind_cols(mydata[1:2],mydata[3:8]) 
+```
+
+`bind_rows` permet de concatener des dataframes en lignes
+```{r}
+bind_rows(mydata[1:2,],mydata[3:8,]) 
+```
+
+L'option `.id` permet de conserver un identifiant de la table d'origine
+```{r}
+bind_rows(mydata[1:2,],mydata[3:8,],.id = "table") 
+```
+```{r}
+bind_rows("groupe1" = mydata[1:2,],
+          "groupe2" = mydata[3:8,],
+          .id = "groupe") 
+```
+
+* Fonctions de jointures :
+
+A l'image du langage SQL, il existe les fonctions `left_join`, `right_join`, `inner_join`, `full_join` ou encore `anti_join`
+
+```{r}
+lyon1 <- mydata %>% 
+  filter(LIBELLE_ARRET == "GARE DE LYON" & JOUR == "2018-08-01") %>% 
+  slice(1:3) %>% 
+  select(CODE_STIF_TRNS, CODE_STIF_RES)
+
+lyon2 <- mydata %>% 
+  filter(LIBELLE_ARRET == "GARE DE LYON" & JOUR == "2018-08-01") %>% 
+  slice(4:6) %>% 
+  select(CODE_STIF_RES, CODE_STIF_ARRET)
+
+```
+
+
+```{r}
+lyon1
+```
+
+
+```{r}
+lyon2
+```
+
+
+```{r}
+inner_join(lyon1, lyon2, by = "CODE_STIF_RES") 
+```
+
+Si on ne précise pas la (ou les) variable(s) de jointure, la fonction va choisir par défaut la (ou les) variables ayant le même libellé entre les 2 dataframes.
+
+```{r}
+inner_join(lyon1, lyon2)
+
+```
+
+
+*Remarque* : on peut aussi écrire de façon équivalente
+
+```{r}
+lyon1 %>% inner_join(lyon2) 
+```
+
+
+
+```{r}
+left_join(lyon1, lyon2, by = "CODE_STIF_RES") 
+```
+
+
+```{r}
+full_join(lyon1, lyon2, by = "CODE_STIF_RES") 
+```
+
+
+```{r}
+anti_join(lyon1, lyon2, by = "CODE_STIF_RES") 
+```
+
+
+## Structures de données avec `tidyr`
+
+`tidyr` sert à mettre les données dans un format où :
+
+* chaque observation est sur une ligne, 
+* chaque variable sur une colonne, 
+* chaque valeur dans une cellule
+
+A noter : historiquement, ces opérations étaient faites à l'aide des packages `reshape` pui `reshape2`.
+
+Les fonctions de `tidyr` permettent essentiellement de faire des opérations de pivots (à l'image des tableaux croisés dynamiques sous Excel) et de split / concaténation de colonnes.
+
+
+```{r}
+library(tidyr)
+
+```
+
+
+### separate() et unite()
+
+`separate()` permet de créer des nouvelles colonnes en découpant une colonne de texte.
+
+Par défaut :  
+
+* cet opérateur va séparer le texte en coupant au niveau des caractères non alphanumériques, telles qu'un tiret par exemple.   
+* à moins d'indiquer `remove=FALSE`, la variable d'origine est effacée
+
+
+```{r}
+
+mydata %>%  filter(LIBELLE_ARRET == "ALLEE DE LA TOUR RENDEZ-VOUS") %>% 
+  separate(JOUR, c("ANNEE", "MOIS", "JOUR"))
+```
+
+`unite()` crée une nouvelle colonne en collant plusieurs colonnes de texte 
+
+Par défaut:  
+
+* les éléments seront collés avec un `_` comme séparateur
+* à moins d'indiquer `remove=FALSE`, la variable d'origine est effacée
+
+
+```{r}
+mydata %>% filter(LIBELLE_ARRET == "ALLEE DE LA TOUR RENDEZ-VOUS") %>% 
+  unite("CODE_STIF_TRNS_RES_ARRET", "CODE_STIF_TRNS", "CODE_STIF_RES", "CODE_STIF_ARRET")
+```
+
+
+
+### gather() 
+
+Cet opérateur permet de pivoter une table.
+
+Les noms de colonnes sont listés dans une nouvelle colonne `key`, avec le type de code.
+La `value` est la valeur cachée qui utilisée dans les colonnes qu'ont veux rassembler, ici avec le numéro de code.
+
+```{r}
+mydata %>% filter(LIBELLE_ARRET == "ALLEE DE LA TOUR RENDEZ-VOUS" & JOUR == "2018-11-27") %>%
+  gather("CODE_STIF_TRNS", "CODE_STIF_RES", "CODE_STIF_ARRET", 
+         key = TYPE_CODE, 
+         value = NUM_CODE)
+```
+
+
+`pivot_longer()` est le nouveau `gather()`, avec une syntaxe simplifiée
+
+```{r}
+mydata %>% filter(LIBELLE_ARRET == "ALLEE DE LA TOUR RENDEZ-VOUS" & JOUR == "2018-11-27") %>%
+  pivot_longer(c(CODE_STIF_TRNS, CODE_STIF_RES, CODE_STIF_ARRET))
+```
+
+
+
+
+### spread()
+
+Cet opérateur fait l'inverse de `gather()`
+
+`key` est la colonne contenant des facteurs où se trouvent les futures nouvelles colonnes et `value` la valeur rattachée à chaque facteur
+
+```{r}
+mydata %>% filter(LIBELLE_ARRET == "ALLEE DE LA TOUR RENDEZ-VOUS") %>% 
+  spread(key = CATEGORIE_TITRE, value = NB_VALD)
+```
+
+
+`pivot_wider()` est le nouveau `spread()`, également avec une syntaxe simplifiée
+
+```{r}
+mydata %>% filter(LIBELLE_ARRET == "ALLEE DE LA TOUR RENDEZ-VOUS" & JOUR == "2018-11-27") %>%
+  pivot_wider(names_from = CATEGORIE_TITRE, values_from = NB_VALD)
+```
+
+
+Dans notre illustration, comme les `CATEGORIE_TITRE` ne sont pas tous présents tous les jours, la fonction complète est prévue pour ce cas de figure : elle permet de compléter des combinaisons manquantes de valeurs de plusieurs colonnes.
+
+```{r}
+mydata %>% filter(LIBELLE_ARRET == "EPINAY SEIN T11" & JOUR > "2018-12-28")  %>%
+  complete(CATEGORIE_TITRE, JOUR)
+```
+
+Par défaut les lignes insérées récupèrent des valeurs manquantes NA pour les colonnes restantes. On peut néanmoins choisir une autre valeur avec l’argument fill, qui prend la forme d’une liste nommée :
+
+
+```{r}
+mydata %>% complete(CATEGORIE_TITRE, JOUR, fill = list(NB_VALD = 0))
+
+```
+
+### valeurs manquantes
+
+
+La fonction `replace_na` permet de rendre explicites des valeurs manquantes. Prenons par exemple les `CODE_STIF_ARRET` manquants
+
+```{r}
+
+mydata %>% filter(is.na(CODE_STIF_ARRET))
+
+```
+
+et remplaçons les par la valeur `9999`
+
+
+```{r}
+
+mydata %>% filter(is.na(CODE_STIF_ARRET)) %>%
+  replace_na(list(CODE_STIF_ARRET=9999))
+
+```
+
+La fonction `complete` est une combinaison de plusieurs fonctions :
+
+* `expand` qui donne toutes les combinaisons possibles des valeurs de 2 colonnes
+
+* `left_join` que nous avons vu dans les fonctions de jointures de `dplyr`
+
+* `replace_na` que nous venons de voir au point précédent
+
+```{r}
+# Création d'un dataframe pour la démo
+
+(df <- tibble(
+  group = c("France", "Espagne","France"),
+  item_id = c(1:2, 2),
+  item_name = c("Population", "Surface", "Surface"),
+  valeur = c(67,643,505),
+  unite = c("millions","milliers km2","milliers km2")
+))
+
+```
+
+La fonction `complete` permet d'ajouter une ligne au dataframe avec la combinaison manquante des variables indiquées dans l'option `nesting`
+
+```{r}
+# utilisation de la fonction complete
+
+df %>% complete(group, nesting(item_id, item_name))
+```
+
+On peut également vouloir éliminer les observations contenant des valeurs manquantes :
+
+* toutes colonnes confondues
+
+```{r}
+mydata %>% drop_na() %>% count()
+
+```
+
+
+* sur une variable en particulier
+
+```{r}
+mydata %>% drop_na(CODE_STIF_ARRET) %>% count()
+
+```
+
+
+## Chaînes de caractères avec `stringr`
+
+
+Cette bibliothèque permet de faire la plupart des opérations sur des chaînes de caractère : 
+
+* mise en forme
+* extraction d'éléments
+
+```{r}
+library(stringr)
+```
+
+
+
+### Mise en forme
+
+
+
+
+`str_split` permet de découper la chaîne à partir des délimiteurs
+
+```{r}
+str_split("SAINT-REMY-LES-CHEVREUSE", "-")
+```
+
+`str_to_upper` met les caractères en majuscules
+
+```{r}
+str_to_upper("saint-remy-les-chevreuse")
+```
+
+
+`str_to_lower` met les caractères en minuscules
+
+```{r}
+str_to_lower("SAINT-REMY-LES-CHEVREUSE")
+```
+
+`str_length` donne la longueur des chaînes de caractères
+
+```{r}
+str_length(unique(mydata$LIBELLE_ARRET[1:10]))
+```
+
+`str_pad` ajoute des espaces dans une chaîne de caractères
+
+```{r}
+# par défaut à gauche
+str_pad("a", c(5, 10, 20)) 
+```
+```{r}
+# idem à droite
+str_pad("a", c(5, 10, 20), "right") 
+```
+`str_trim` supprime par défaut tous les espaces dans une chaîne de caractères
+
+```{r}
+str_trim("   a   ") 
+```
+
+mais on peut aussi ne le faire que d'un côté
+
+```{r}
+str_trim("   a   ", side="left") 
+```
+
+`str_trunc` permet de limiter la longueur et de remplacer les caractères par autre chose
+
+```{r}
+str_trunc("abcdefgh",5, ellipsis = "_") 
+
+```
+
+
+### Extraction
+
+`str_sub` permet d’extraire des sous-chaînes par position, en indiquant simplement les positions des premiers et derniers caractères
+
+```{r}
+(arrets <- unique(mydata$LIBELLE_ARRET[1:60]))
+```
+
+
+```{r}
+str_sub(arrets, 1, 3)
+```
+
+
+`str_detect` sert à détecter des patterns
+
+
+```{r}
+arrets <- unique(mydata$LIBELLE_ARRET[1:30])
+arrets[str_detect(unique(mydata$LIBELLE_ARRET[1:30]), "SAINT")]
+```
+
+
+On peut aussi remplacer des chaînes de caractères avec `str_replace`
+
+```{r}
+str_replace("AEROPORT CHARLES DE GAULLE 1", "AEROPORT", "PORT")
+```
+
+
+En combinant une instruction regex avec l'opérateur `str_extract`, on peut par exemple trouver toutes les stations qui commencent par "PORTE"
+
+```{r}
+x <- unique(mydata$LIBELLE_ARRET)
+
+extract <- str_extract(x, "PORTE .*")
+extract[!is.na(extract)]
+```
+
+
